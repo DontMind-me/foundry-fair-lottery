@@ -31,7 +31,7 @@ contract LotteryTest is Test {
     function setUp() external {
         DeployLottery deployLottery = new DeployLottery();
         (lottery, helperConfig) = deployLottery.run();
-        (entranceFee, interval, vrfCoordinator, gaslane, subscriptionID, callbackGasLimit, link) = helperConfig.activeNetworkConfig();
+        (entranceFee, interval, vrfCoordinator, gaslane, subscriptionID, callbackGasLimit, link,) = helperConfig.activeNetworkConfig();
         vm.deal(PLAYER, STARTING_BALANCE);
     }
 
@@ -177,13 +177,21 @@ contract LotteryTest is Test {
     //////// FULFILLRANDOMWORDS ////////
     ////////////////////////////////////
 
-    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public RaffleEnteredAndTimePassed() {
+    modifier skipFork() {
+        if (block.chainid != 31337){
+            return;
+        }
+        _;
+    }
+
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public skipFork RaffleEnteredAndTimePassed() {
         //Arrange
         vm.expectRevert("nonexistent request");
         VRFCoordinatorV2Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(lottery));
     }
 
-    function testFulfillRandomWordsPicksWinnerResetsAndSendsMoney() public RaffleEnteredAndTimePassed() {
+
+    function testFulfillRandomWordsPicksWinnerResetsAndSendsMoney() public skipFork() RaffleEnteredAndTimePassed() {
         //Arrange
         uint256 startingIndex = 1;
         uint256 Entrants = 5;
@@ -195,6 +203,7 @@ contract LotteryTest is Test {
             lottery.enterLottery{value: ENTERANCE_FEE}();
         }
 
+
         uint256 prize = ENTERANCE_FEE * (Entrants + 1);
 
         vm.recordLogs();
@@ -204,16 +213,14 @@ contract LotteryTest is Test {
 
         //Act
         VRFCoordinatorV2Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(lottery));
-        vm.expectEmit(true,false,false,false,address(lottery));
-        emit WinnerPicked(lottery.getRecentWinner());
+
         //Assert
-        // assert(uint256(lottery.getLotteryState()) == 0);
-        // assert(lottery.getRecentWinner() != address(0));
-        // assert(lottery.getPlayerLength() == 0);
-        // assert(recentTimeStamp < lottery.getLastTimeStamp());
-        console.log(lottery.getRecentWinner().balance);
-        console.log(STARTING_BALANCE + prize - ENTERANCE_FEE);
+        assert(uint256(lottery.getLotteryState()) == 0);
+        assert(lottery.getRecentWinner() != address(0));
+        assert(lottery.getPlayerLength() == 0);
+        assert(recentTimeStamp < lottery.getLastTimeStamp());
         assert(lottery.getRecentWinner().balance == STARTING_BALANCE + prize - ENTERANCE_FEE);
+        assert(uint256(requestId) > 0);
 
     }
 
